@@ -13,6 +13,10 @@ namespace Cactus.Mongo.Migration.Model
     {
         protected static readonly string DefaultVersionCollectionName = "ver";
         protected static readonly TimeSpan DefaultDistributedLockTimeout = TimeSpan.FromSeconds(10);
+        private static readonly Lazy<UpgradeSettings> _default = new Lazy<UpgradeSettings>(() => new UpgradeSettings());
+
+        public static UpgradeSettings Default => _default.Value;
+
         public UpgradeSettings()
         {
             VersionCollectionName = DefaultVersionCollectionName;

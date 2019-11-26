@@ -34,7 +34,7 @@ namespace AspnetExample
                 app.UseDeveloperExceptionPage();
             }
 
-            app.ApplicationServices.GetRequiredService<IUpgrader>().UpgradeOrInit().GetAwaiter().GetResult();
+            app.ApplicationServices.UpgradeMongo();
 
             app.UseRouting();
 
