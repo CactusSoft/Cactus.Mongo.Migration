@@ -22,8 +22,12 @@ namespace AspnetExample
 
             // Add a migration
             services.AddMigrations(
-                new DbInit(),
-                new IUpgradeLink[] { new FirstMigration(), new SecondMigration() });
+                s => UpgradeSettings.Default,
+                s => s.GetRequiredService<IMongoDatabase>(),
+                s => null, s => null);
+            //services.AddMigrations(
+            //    new DbInit(),
+            //    new IUpgradeLink[] { new FirstMigration(), new SecondMigration() });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

@@ -39,5 +39,10 @@ namespace Cactus.Mongo.Migration.Extensions
         {
             return services.AddMigrations(s => UpgradeSettings.Default, s => s.GetRequiredService<IMongoDatabase>(), s => null, s => upgrades);
         }
+
+        public static IServiceCollection AddMigrations(this IServiceCollection services, IUpgrade initializer)
+        {
+            return services.AddMigrations(s => UpgradeSettings.Default, s => s.GetRequiredService<IMongoDatabase>(), s => initializer, s => null);
+        }
     }
 }

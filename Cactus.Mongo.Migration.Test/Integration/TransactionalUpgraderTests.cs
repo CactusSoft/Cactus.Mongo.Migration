@@ -112,6 +112,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             await upgrader.UpgradeOrInit();
             var ver = (await verCollection.FindAsync(e => true)).First();
             Assert.IsNull(ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
         }
 
         [Test]
@@ -138,6 +139,8 @@ namespace Cactus.Mongo.Migration.Test.Integration
             await upgrader.UpgradeOrInit();
             var ver = (await verCollection.FindAsync(e => true)).First();
             Assert.AreEqual(Version.Parse("0.3"), ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
+            Assert.IsNull(ver.LastUpgradeError);
         }
 
         [Test]
@@ -212,6 +215,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
 
             ver = (await verCollection.FindAsync(e => true)).First();
             Assert.AreEqual(Version.Parse("0.3"), ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
         }
 
         [Test]
@@ -254,6 +258,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
 
             ver = (await verCollection.FindAsync(e => true)).First();
             Assert.AreEqual(Version.Parse("0.3"), ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
         }
 
         [Test]
@@ -283,6 +288,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
 
             var ver = (await verCollection.FindAsync(e => true)).First();
             Assert.AreEqual(Version.Parse("0.3"), ver.Version, "After init, DB should marked with the latest version");
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
         }
     }
 }
