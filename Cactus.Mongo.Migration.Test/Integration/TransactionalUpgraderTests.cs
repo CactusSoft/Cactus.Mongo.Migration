@@ -112,6 +112,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             await upgrader.UpgradeOrInit();
             var ver = (await verCollection.FindAsync(e => true)).First();
             Assert.IsNull(ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
         }
 
         [Test]
@@ -138,6 +139,8 @@ namespace Cactus.Mongo.Migration.Test.Integration
             await upgrader.UpgradeOrInit();
             var ver = (await verCollection.FindAsync(e => true)).First();
             Assert.AreEqual(Version.Parse("0.3"), ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
+            Assert.IsNull(ver.LastUpgradeError);
         }
 
         [Test]
@@ -171,7 +174,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.IsNotNull(ver.LastUpgradeError);
             Assert.IsTrue(ver.LastUpgradeError.Contains("test init failed"));
         }
-
+        
         [Test]
         public async Task UpgradeTest()
         {
@@ -212,6 +215,50 @@ namespace Cactus.Mongo.Migration.Test.Integration
 
             ver = (await verCollection.FindAsync(e => true)).First();
             Assert.AreEqual(Version.Parse("0.3"), ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
+        }
+
+        [Test]
+        public async Task UpgradeWithDifferentVerCollectionNameTest()
+        {
+            var settings = new UpgradeSettings {VersionCollectionName = "testtestete"};
+            var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
+            await _database.DropCollectionAsync(settings.VersionCollectionName);
+            var dbLock = new MongoDbLock(verCollection);
+
+            //Step1: init db
+            var upgrader = new TransactionalUpgrader(
+                _database,
+                new UpgradeChain(null),
+                new UpgradeStub(null, "0.0"),
+                settings,
+                dbLock,
+                new NullLoggerFactory());
+            await upgrader.UpgradeOrInit();
+
+            var ver = (await verCollection.FindAsync(e => true)).First();
+            Assert.AreEqual(Version.Parse("0.0"), ver.Version);
+
+            //Step2: Apply upgrade chain
+            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+            {
+                new UpgradeStub("0.0", "0.1"),
+                new UpgradeStub("0.1", "0.2"),
+                new UpgradeStub("0.2", "0.3"),
+            });
+
+            upgrader = new TransactionalUpgrader(
+                _database,
+                upgrades,
+                new UpgradeStub(null, "0.0", (s, db, log) => throw new Exception("test init failed")),
+                settings,
+                dbLock,
+                new NullLoggerFactory());
+            await upgrader.UpgradeOrInit();
+
+            ver = (await verCollection.FindAsync(e => true)).First();
+            Assert.AreEqual(Version.Parse("0.3"), ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
         }
 
         [Test]
@@ -241,6 +288,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
 
             var ver = (await verCollection.FindAsync(e => true)).First();
             Assert.AreEqual(Version.Parse("0.3"), ver.Version, "After init, DB should marked with the latest version");
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
         }
     }
 }

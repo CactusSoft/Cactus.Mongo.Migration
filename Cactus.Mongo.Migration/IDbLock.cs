@@ -44,9 +44,10 @@ namespace Cactus.Mongo.Migration
                         Builders<DbVersion>.Update
                             .Set(e => e.IsLocked, true)
                             .Set(e => e.LockerId, _lockerId)
-                            .SetOnInsert(e => e.Id, LockObjId),
+                            .SetOnInsert(e => e.Id, LockObjId)
+                            .SetOnInsert(e => e.AutoUpgradeEnabled, true),
                         new FindOneAndUpdateOptions<DbVersion>
-                            { IsUpsert = true, ReturnDocument = ReturnDocument.After });
+                        { IsUpsert = true, ReturnDocument = ReturnDocument.After });
 
                     if (ver != null)
                     {

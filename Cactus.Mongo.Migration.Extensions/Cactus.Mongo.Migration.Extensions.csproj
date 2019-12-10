@@ -12,6 +12,7 @@
     <PackageTags>mongodb,migration</PackageTags>
     <RepositoryType>GitHub</RepositoryType>
     <Company>CactusSoft LLC</Company>
+    <Version>1.0.3</Version>
   </PropertyGroup>
 
   <ItemGroup>

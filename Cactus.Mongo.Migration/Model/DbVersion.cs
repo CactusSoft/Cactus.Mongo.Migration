@@ -6,12 +6,6 @@ namespace Cactus.Mongo.Migration.Model
 {
     public class DbVersion
     {
-        public DbVersion()
-        {
-            AutoUpgradeEnabled = true;
-            //Version = new Version(0, 0, 0, 0);
-        }
-
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; }
