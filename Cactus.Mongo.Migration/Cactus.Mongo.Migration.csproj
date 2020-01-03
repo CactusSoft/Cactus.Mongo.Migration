@@ -12,7 +12,9 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageTags>mongodb,migration</PackageTags>
     <Description>Simple MongoDB versioning &amp; migrations</Description>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
+    <AssemblyVersion>1.0.4.0</AssemblyVersion>
+    <FileVersion>1.0.4.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

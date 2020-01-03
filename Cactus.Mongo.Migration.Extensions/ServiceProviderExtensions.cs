@@ -10,7 +10,7 @@ namespace Cactus.Mongo.Migration.Extensions
             using (var scope = serviceProvider.CreateScope())
             {
                 scope.ServiceProvider
-                    .GetRequiredService<IUpgrader>()
+                    .GetRequiredService<IMigrator>()
                     .UpgradeOrInit()
                     .GetAwaiter().GetResult();
             }

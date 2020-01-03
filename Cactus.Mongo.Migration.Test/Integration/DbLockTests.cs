@@ -14,6 +14,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
         private MongoDbRunner _runner;
         private IMongoDatabase _database;
         private MongoClient _client;
+        private UpgradeSettings _settings;
 
         [OneTimeSetUp]
         public void SetUp()
@@ -22,6 +23,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             _runner = MongoDbRunner.Start();
             _client = new MongoClient(_runner.ConnectionString);
             _database = _client.GetDatabase("intergationtest");
+            _settings = UpgradeSettings.Default;
 
         }
 
@@ -35,17 +37,16 @@ namespace Cactus.Mongo.Migration.Test.Integration
         [Test]
         public async Task LockReleaseOnEmptyDbTest()
         {
-            await _database.DropCollectionAsync("ver");
-            var verCollection = _database.GetCollection<DbVersion>("ver");
-            var dbLock = new MongoDbLock(verCollection);
+            await _database.DropCollectionAsync(_settings.VersionCollectionName);
+            var verCollection = _database.GetCollection<DbVersion>(_settings.VersionCollectionName);
+            var dbLock = new MongoDbLock(_settings, _database);
             var ver = await dbLock.ObtainLock(TimeSpan.FromSeconds(5));
             Assert.IsNotNull(ver);
             Assert.IsNotNull(ver.LockerId);
             Assert.IsTrue(ver.IsLocked);
-            Assert.IsTrue(ver.AutoUpgradeEnabled);
-            Assert.IsNull(ver.Version);
+
             await dbLock.ReleaseLock();
-            var ver2 = (await verCollection.FindAsync(e => e.Id == ver.Id)).First();
+            var ver2 = (await verCollection.FindAsync(e => e.Id == _settings.VersionDocumentId)).First();
             Assert.IsNotNull(ver2);
             Assert.AreEqual(ver.LockerId, ver2.LockerId);
             Assert.IsFalse(ver2.IsLocked);
@@ -56,20 +57,17 @@ namespace Cactus.Mongo.Migration.Test.Integration
         [Test]
         public async Task LockOnEmptyDbTwiceTest([Values(3, 5, 8, 12)]int secondsToWait)
         {
-            await _database.DropCollectionAsync("ver");
-            var verCollection = _database.GetCollection<DbVersion>("ver");
-            var dbLock1 = new MongoDbLock(verCollection);
+            await _database.DropCollectionAsync(_settings.VersionCollectionName);
+            var dbLock1 = new MongoDbLock(_settings, _database);
             var ver1 = await dbLock1.ObtainLock(TimeSpan.FromSeconds(0));
             Assert.IsNotNull(ver1);
             Assert.IsNotNull(ver1.LockerId);
             Assert.IsTrue(ver1.IsLocked);
-            Assert.IsTrue(ver1.AutoUpgradeEnabled);
-            Assert.IsNull(ver1.Version);
 
-            var dbLock2 = new MongoDbLock(verCollection);
+            var dbLock2 = new MongoDbLock(_settings, _database);
             var stopWatch = new Stopwatch();
             stopWatch.Start();
-            Assert.ThrowsAsync<MongoMigrationException>(() => dbLock2.ObtainLock(TimeSpan.FromSeconds(secondsToWait)));
+            Assert.ThrowsAsync<MigrationException>(() => dbLock2.ObtainLock(TimeSpan.FromSeconds(secondsToWait)));
             stopWatch.Stop();
             Assert.IsTrue(TimeSpan.FromSeconds(secondsToWait - 1) < stopWatch.Elapsed, $"Elapsed: {stopWatch.Elapsed}");
             Assert.IsTrue(TimeSpan.FromSeconds(secondsToWait + 1) > stopWatch.Elapsed, $"Elapsed: {stopWatch.Elapsed}");
@@ -78,18 +76,14 @@ namespace Cactus.Mongo.Migration.Test.Integration
         [Test]
         public async Task LockReleaseLockTest()
         {
-            await _database.DropCollectionAsync("ver");
-            var verCollection = _database.GetCollection<DbVersion>("ver");
-            var dbLock1 = new MongoDbLock(verCollection);
+            await _database.DropCollectionAsync(_settings.VersionCollectionName);
+            var dbLock1 = new MongoDbLock(_settings, _database);
             var ver1 = await dbLock1.ObtainLock(TimeSpan.FromSeconds(0));
             Assert.IsNotNull(ver1);
             Assert.IsNotNull(ver1.LockerId);
             Assert.IsTrue(ver1.IsLocked);
-            Assert.IsTrue(ver1.AutoUpgradeEnabled);
-            Assert.IsNull(ver1.Version);
 
-            var dbLock2 = new MongoDbLock(verCollection);
-            var stopWatch = new Stopwatch();
+            var dbLock2 = new MongoDbLock(_settings, _database);
             var secondLockTask = dbLock2.ObtainLock(TimeSpan.FromSeconds(5));
             await dbLock1.ReleaseLock();
             var ver2 = await secondLockTask;
@@ -98,7 +92,6 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.IsNotNull(ver2.LockerId);
             Assert.AreNotEqual(ver1.LockerId, ver2.LockerId);
             Assert.IsTrue(ver1.IsLocked);
-            Assert.IsTrue(ver1.AutoUpgradeEnabled);
         }
     }
 }

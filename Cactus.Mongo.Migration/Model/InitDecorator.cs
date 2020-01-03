@@ -5,11 +5,11 @@ using MongoDB.Driver;
 
 namespace Cactus.Mongo.Migration.Model
 {
-    internal class InitializerDecorator : IUpgrade
+    public class InitDecorator : IUpgrade
     {
         private readonly IUpgrade _target;
 
-        public InitializerDecorator(IUpgrade target, Version upgradeTo)
+        public InitDecorator(IUpgrade target, Version upgradeTo)
         {
             _target = target;
             UpgradeTo = upgradeTo;

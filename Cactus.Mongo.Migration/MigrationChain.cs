@@ -8,7 +8,7 @@ namespace Cactus.Mongo.Migration
     /// <summary>
     /// Chain of upgrades
     /// </summary>
-    public interface IUpgradeChain
+    public interface IMigrationChain
     {
         /// <summary>
         /// Check the chain for a most common mistakes
@@ -36,11 +36,11 @@ namespace Cactus.Mongo.Migration
         Version Target { get; }
     }
 
-    public class UpgradeChain : IUpgradeChain
+    public class MigrationChain : IMigrationChain
     {
         private readonly IList<IUpgradeLink> _upgradeChain;
 
-        public UpgradeChain(IEnumerable<IUpgradeLink> upgrades)
+        public MigrationChain(IEnumerable<IUpgradeLink> upgrades)
         {
             if (upgrades == null)
             {
@@ -70,7 +70,7 @@ namespace Cactus.Mongo.Migration
                 }
                 else
                 {
-                    throw new MongoMigrationException($"Chain validation failed: unable to find a start point to upgrade from NULL version");
+                    throw new MigrationException($"Chain validation failed: unable to find a start point to upgrade from NULL version");
                 }
             }
             else
@@ -85,7 +85,7 @@ namespace Cactus.Mongo.Migration
                 if (startPoint == null)
                 {
 
-                    throw new MongoMigrationException($"Chain validation failed: unable to find a start point to upgrade from the current version {from}");
+                    throw new MigrationException($"Chain validation failed: unable to find a start point to upgrade from the current version {from}");
                 }
 
                 var startindex = _upgradeChain.IndexOf(startPoint);
@@ -113,33 +113,33 @@ namespace Cactus.Mongo.Migration
             {
                 if (upgrade == null)
                 {
-                    throw new MongoMigrationException($"Null object found in the chain");
+                    throw new MigrationException($"Null object found in the chain");
                 }
 
                 if (upgrade.MinFrom == upgrade.UpgradeTo)
                 {
-                    throw new MongoMigrationException($"Chain validation failed: equal from & to versions in the same upgrade version {upgrade.MinFrom}");
+                    throw new MigrationException($"Chain validation failed: equal from & to versions in the same upgrade version {upgrade.MinFrom}");
                 }
 
                 if (upgrade.MinFrom == null)
                 {
                     if (_upgradeChain.IndexOf(upgrade) > 0)
-                        throw new MongoMigrationException($"Chain validation failed: only the first upgrade in the chain can have From=null");
+                        throw new MigrationException($"Chain validation failed: only the first upgrade in the chain can have From=null");
                 }
 
                 if (upgrade.UpgradeTo == null)
                 {
-                    throw new MongoMigrationException($"Chain validation failed: UpgradeTo could not be null");
+                    throw new MigrationException($"Chain validation failed: UpgradeTo could not be null");
                 }
 
                 if (upgrade.MinFrom != null && upgrade.MinFrom >= upgrade.UpgradeTo)
                 {
-                    throw new MongoMigrationException($"Chain validation failed: UpgradeFrom should always be less than UpgradeTo. The issue found in {upgrade.GetType().Name}");
+                    throw new MigrationException($"Chain validation failed: UpgradeFrom should always be less than UpgradeTo. The issue found in {upgrade.GetType().Name}");
                 }
 
                 if (versionSet.Contains(upgrade.UpgradeTo))
                 {
-                    throw new MongoMigrationException($"Chain validation failed: UpgradeTo must be unique for every upgrade, {upgrade.UpgradeTo} duplicates");
+                    throw new MigrationException($"Chain validation failed: UpgradeTo must be unique for every upgrade, {upgrade.UpgradeTo} duplicates");
                 }
                 versionSet.Add(upgrade.UpgradeTo);
             }
@@ -151,7 +151,7 @@ namespace Cactus.Mongo.Migration
                 var thisUpgrade = _upgradeChain[i];
                 if (prevUpgrade.UpgradeTo < thisUpgrade.MinFrom)
                 {
-                    throw new MongoMigrationException($"Chain validation failed: a gap detected between version {prevUpgrade.UpgradeTo} and {thisUpgrade.MinFrom}");
+                    throw new MigrationException($"Chain validation failed: a gap detected between version {prevUpgrade.UpgradeTo} and {thisUpgrade.MinFrom}");
                 }
             }
         }

@@ -4,7 +4,24 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace Cactus.Mongo.Migration.Model
 {
-    public class DbVersion
+    public interface IMigrationState
+    {
+        bool AutoUpgradeEnabled { get; }
+
+        string LastUpgradeError { get; }
+
+        Version Version { get; }
+
+    }
+
+    public interface IDbLockState
+    {
+        bool IsLocked { get; }
+
+        string LockerId { get; }
+    }
+
+    public class DbVersion : IMigrationState, IDbLockState
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]

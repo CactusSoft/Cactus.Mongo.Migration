@@ -7,67 +7,64 @@ using MongoDB.Driver.Core.Clusters;
 
 namespace Cactus.Mongo.Migration
 {
-    public class TransactionalUpgrader : IUpgrader
+    /// <summary>
+    /// 
+    /// </summary>
+    public interface IMigrator
     {
-        private readonly ILogger<TransactionalUpgrader> _log;
+        /// <summary>
+        /// Perform DB upgrade if necessary 
+        /// </summary>
+        /// <returns></returns>
+        Task UpgradeOrInit();
+    }
+
+    public class MongoMigrator : IMigrator
+    {
+        private readonly ILogger<MongoMigrator> _log;
         private readonly ILoggerFactory _logFactory;
         private readonly IMongoDatabase _db;
-        private readonly IUpgradeChain _upgrades;
+        private readonly IMigrationChain _upgrades;
         private readonly IUpgrade _initializer;
         private readonly IUpgradeSettings _settings;
-        private readonly IMongoCollection<DbVersion> _versionCollection;
         private readonly IDbLock _dbLock;
+        private readonly IMigrationTracker _tracker;
         private readonly bool _isTransactionsAvailable;
-        private DbVersion _currentVersion;
+        protected IMigrationState MigrationState;
 
         /// <summary>
         /// Only for test
         /// </summary>
         /// <param name="db"></param>
+        /// <param name="dbLock"></param>
         /// <param name="upgrades"></param>
         /// <param name="initializer"></param>
         /// <param name="settings"></param>
+        /// <param name="tracker"></param>
         /// <param name="logFactory"></param>
-        public TransactionalUpgrader(
+        public MongoMigrator(
             IMongoDatabase db,
-            IUpgradeChain upgrades,
-            IUpgrade initializer,
-            IUpgradeSettings settings,
-            ILoggerFactory logFactory)
-        {
-            _log = logFactory.CreateLogger<TransactionalUpgrader>();
-            _logFactory = logFactory;
-            _db = db;
-            _upgrades = upgrades;
-            _initializer = initializer;
-            _settings = settings;
-            _versionCollection = _db.GetCollection<DbVersion>(settings.VersionCollectionName);
-            _dbLock = new MongoDbLock(_versionCollection);
-            _isTransactionsAvailable = _db.Client.Cluster.Description.Type > ClusterType.Standalone;
-        }
-
-        public TransactionalUpgrader(
-            IMongoDatabase db,
-            IUpgradeChain upgrades,
+            IMigrationChain upgrades,
             IUpgrade initializer,
             IUpgradeSettings settings,
             IDbLock dbLock,
+            IMigrationTracker tracker,
             ILoggerFactory logFactory)
         {
-            _log = logFactory.CreateLogger<TransactionalUpgrader>();
+            _log = logFactory.CreateLogger<MongoMigrator>();
             _logFactory = logFactory;
             _db = db;
             _upgrades = upgrades;
             _initializer = initializer;
             _settings = settings;
-            _versionCollection = _db.GetCollection<DbVersion>(settings.VersionCollectionName);
             _dbLock = dbLock;
+            _tracker = tracker;
             _isTransactionsAvailable = _db.Client.Cluster.Description.Type > ClusterType.Standalone;
         }
 
-        protected virtual bool IsNewDatabase()
+        protected virtual bool IsNewDb()
         {
-            return _currentVersion.Version == null && _currentVersion.LastUpgradeError == null && _currentVersion.AutoUpgradeEnabled;
+            return MigrationState.Version == null && MigrationState.LastUpgradeError == null && MigrationState.AutoUpgradeEnabled;
         }
 
         public async Task UpgradeOrInit()
@@ -77,18 +74,20 @@ namespace Cactus.Mongo.Migration
 
             if (_settings.IsTransactionRequired && !_isTransactionsAvailable)
             {
-                throw new MongoMigrationException("Upgrade failed: transactions are not available on standalone server, but required by the config.");
+                throw new MigrationException("Upgrade failed: transactions are not available on standalone server, but required by the config.");
             }
 
             try
             {
                 _log.LogInformation("Try to obtain db lock...");
-                _currentVersion = await _dbLock.ObtainLock(_settings.DistributedLockTimeout);
+                await _dbLock.ObtainLock(_settings.DistributedLockTimeout);
+                MigrationState = await _tracker.GetState();
 
-                _log.LogInformation("DB lock obtained, current ver: {0}, autoupgrade is {1}.", _currentVersion.Version, _currentVersion.AutoUpgradeEnabled ? "enabled" : "disabled");
+                _log.LogInformation("DB lock obtained, current ver: {0}, autoupgrade is {1}.", MigrationState.Version, MigrationState.AutoUpgradeEnabled ? "enabled" : "disabled");
 
-                if (IsNewDatabase())
+                if (IsNewDb())
                 {
+                    _log.LogInformation("It new database, applying init...");
                     //Get max(init.ver, updates.lastVer)
                     var targetVersion = _initializer?.UpgradeTo ?? _upgrades.Target;
                     targetVersion = targetVersion < _upgrades.Target ? _upgrades.Target : targetVersion;
@@ -108,19 +107,19 @@ namespace Cactus.Mongo.Migration
 
         private async Task Upgrade()
         {
-            if (!_upgrades.HasAny(_currentVersion.Version))
+            if (!_upgrades.HasAny(MigrationState.Version))
             {
                 _log.LogInformation("There's nothing to upgrade, finishing up...");
                 return;
             }
 
-            if (_currentVersion.AutoUpgradeEnabled == false)
+            if (MigrationState.AutoUpgradeEnabled == false)
             {
                 _log.LogError("Upgrade failed: autoupgrade is disabled, that could mean error on the previous upgrades.");
-                throw new MongoMigrationException("Upgrade failed: autoupgrade is disabled, that could mean error on the previous upgrades.");
+                throw new MigrationException("Upgrade failed: autoupgrade is disabled, that could mean error on the previous upgrades.");
             }
 
-            foreach (var upgrade in _upgrades.GetUpgradePath(_currentVersion.Version))
+            foreach (var upgrade in _upgrades.GetUpgradePath(MigrationState.Version))
             {
                 _log.LogInformation("Start to upgrade to {0}...", upgrade.UpgradeTo);
                 try
@@ -146,7 +145,7 @@ namespace Cactus.Mongo.Migration
                 try
                 {
                     await upgrade.Apply(session, _db, _logFactory.CreateLogger(upgrade.GetType()));
-                    await _versionCollection.UpdateOneAsync(session, e => e.Id == _currentVersion.Id, Builders<DbVersion>.Update.Set(e => e.Version, upgrade.UpgradeTo));
+                    await _tracker.TrackSuccessUpgrade(session, upgrade.UpgradeTo);
                     if (_isTransactionsAvailable)
                         await session.CommitTransactionAsync();
                 }
@@ -162,11 +161,11 @@ namespace Cactus.Mongo.Migration
                         _log.LogCritical("Upgrade to {0} failed & transactions are not supported. DB may be inconsistent.", upgrade.UpgradeTo);
                     }
 
-                    throw new MongoMigrationException($"Upgrade to ver {upgrade.UpgradeTo} failed.", ex);
+                    throw new MigrationException($"Upgrade to ver {upgrade.UpgradeTo} failed.", ex);
                 }
             }
 
-            _currentVersion.Version = upgrade.UpgradeTo;
+            MigrationState = await _tracker.GetState();
             _log.LogDebug("Upgrade success, current version is {0}", upgrade.UpgradeTo);
         }
 
@@ -174,7 +173,7 @@ namespace Cactus.Mongo.Migration
         {
             try
             {
-                await Apply(new InitializerDecorator(_initializer, target));
+                await Apply(new InitDecorator(_initializer, target));
             }
             catch (Exception ex)
             {
@@ -187,11 +186,7 @@ namespace Cactus.Mongo.Migration
         {
             try
             {
-                await _versionCollection.UpdateOneAsync(
-                    e => e.Id == _currentVersion.Id,
-                    Builders<DbVersion>.Update
-                        .Set(e => e.AutoUpgradeEnabled, false)
-                        .Set(e => e.LastUpgradeError, error));
+                await _tracker.TrackFail(error);
             }
             catch
             {

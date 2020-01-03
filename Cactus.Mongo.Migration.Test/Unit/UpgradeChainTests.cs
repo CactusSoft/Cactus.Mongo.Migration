@@ -12,7 +12,7 @@ namespace Cactus.Mongo.Migration.Test.Unit
         public void EmptyUpgradeListTest()
         {
             // All these means nothing to upgrade
-            var chain = new UpgradeChain(Enumerable.Empty<IUpgradeLink>());
+            var chain = new MigrationChain(Enumerable.Empty<IUpgradeLink>());
             chain.Validate();
             var path = chain.GetUpgradePath(null);
             Assert.IsNotNull(path);
@@ -24,7 +24,7 @@ namespace Cactus.Mongo.Migration.Test.Unit
         public void ConsistentUpgradeWithNullListTest([Values(null, "0.0", "0.1", "0.2", "0.3", "0.4", "1.0")]string current)
         {
             var currentVer = current == null ? null : Version.Parse(current);
-            var chain = new UpgradeChain(new List<IUpgradeLink>
+            var chain = new MigrationChain(new List<IUpgradeLink>
             {
                  new UpgradeStub(null,"0.0"),
                  new UpgradeStub("0.0","0.1"),
@@ -64,7 +64,7 @@ namespace Cactus.Mongo.Migration.Test.Unit
         public void ConsistentUpgradeListTest([Values("0.0", "0.1", "0.2", "0.3", "0.4", "1.0")]string current)
         {
             var currentVer = current == null ? null : Version.Parse(current);
-            var chain = new UpgradeChain(new List<IUpgradeLink>
+            var chain = new MigrationChain(new List<IUpgradeLink>
             {
                  new UpgradeStub("0.0","0.1"),
                  new UpgradeStub("0.1","0.2"),
@@ -100,26 +100,26 @@ namespace Cactus.Mongo.Migration.Test.Unit
         [Test]
         public void GapInChainTest()
         {
-            var chain = new UpgradeChain(new List<IUpgradeLink>
+            var chain = new MigrationChain(new List<IUpgradeLink>
             {
                  new UpgradeStub("0.0","0.1"),
                  new UpgradeStub("0.2","0.3"),
                  new UpgradeStub("0.3","0.4"),
             });
-            Assert.That(chain.Validate, Throws.InstanceOf<MongoMigrationException>());
+            Assert.That(chain.Validate, Throws.InstanceOf<MigrationException>());
             Assert.AreEqual(Version.Parse("0.4"), chain.Target);
         }
 
         [Test]
         public void UpgradeToVersionIsUniqueTest()
         {
-            var chain = new UpgradeChain(new List<IUpgradeLink>
+            var chain = new MigrationChain(new List<IUpgradeLink>
             {
                  new UpgradeStub("0.0","0.1"),
                  new UpgradeStub("0.0","0.3"),
                  new UpgradeStub("0.0","0.3"),
             });
-            Assert.That(chain.Validate, Throws.InstanceOf<MongoMigrationException>());
+            Assert.That(chain.Validate, Throws.InstanceOf<MigrationException>());
         }
 
         [Test]
@@ -127,7 +127,7 @@ namespace Cactus.Mongo.Migration.Test.Unit
         {
             for (int i = 0; i < 10; i++) //To shuffle list a few times
             {
-                var chain = new UpgradeChain(new List<IUpgradeLink>
+                var chain = new MigrationChain(new List<IUpgradeLink>
                 {
                      new UpgradeStub("0.0","0.1"),
                      new UpgradeStub("0.1","0.2"),

@@ -8,24 +8,25 @@ namespace Cactus.Mongo.Migration
     //TODO: IAsyncDisposable
     public interface IDbLock
     {
-        Task<DbVersion> ObtainLock(TimeSpan timeout);
+        Task<IDbLockState> ObtainLock(TimeSpan timeout);
         Task ReleaseLock();
     }
 
     public class MongoDbLock : IDbLock
     {
-        private static readonly string LockObjId = "000000000000000000000000";
         private readonly IMongoCollection<DbVersion> _verCollection;
+        private readonly string _docId;
         private readonly string _lockerId;
         private volatile bool _isLockObtained;
 
-        public MongoDbLock(IMongoCollection<DbVersion> verCollection)
+        public MongoDbLock(IUpgradeSettings settings, IMongoDatabase db)
         {
-            _verCollection = verCollection;
+            _verCollection = db.GetCollection<DbVersion>(settings.VersionCollectionName);
+            _docId = settings.VersionDocumentId;
             _lockerId = Guid.NewGuid().ToString("N");
         }
 
-        public async Task<DbVersion> ObtainLock(TimeSpan timeout)
+        public async Task<IDbLockState> ObtainLock(TimeSpan timeout)
         {
             //To ensure that the collection is created before trying to obtain a lock
             await _verCollection.CountDocumentsAsync(e => true);
@@ -40,11 +41,11 @@ namespace Cactus.Mongo.Migration
                 try
                 {
                     var ver = await _verCollection.FindOneAndUpdateAsync<DbVersion>(
-                        e => e.Id == LockObjId && e.IsLocked == false,
+                        e => e.Id == _docId && e.IsLocked == false,
                         Builders<DbVersion>.Update
                             .Set(e => e.IsLocked, true)
                             .Set(e => e.LockerId, _lockerId)
-                            .SetOnInsert(e => e.Id, LockObjId)
+                            .SetOnInsert(e => e.Id, _docId)
                             .SetOnInsert(e => e.AutoUpgradeEnabled, true),
                         new FindOneAndUpdateOptions<DbVersion>
                         { IsUpsert = true, ReturnDocument = ReturnDocument.After });
@@ -65,17 +66,17 @@ namespace Cactus.Mongo.Migration
             }
 
             //Lock is not obtained
-            throw new MongoMigrationException($"Lock retrive failed: timeout {timeout} exceeded, {counter} tries done");
+            throw new MigrationException($"Lock retrieve failed: timeout {timeout} exceeded, {counter} tries done");
         }
 
         public async Task ReleaseLock()
         {
             if (_isLockObtained)
             {
-                var res = await _verCollection.UpdateOneAsync(e => e.Id == LockObjId && e.LockerId == _lockerId, Builders<DbVersion>.Update.Set(e => e.IsLocked, false));
+                var res = await _verCollection.UpdateOneAsync(e => e.Id == _docId && e.LockerId == _lockerId, Builders<DbVersion>.Update.Set(e => e.IsLocked, false));
                 if (res.MatchedCount == 0)
                 {
-                    throw new MongoMigrationException($"Lock release failed: entity not found for Id:{LockObjId} and LockerId:{_lockerId}");
+                    throw new MigrationException($"Lock release failed: entity not found for Id:{_docId} and LockerId:{_lockerId}");
                 }
                 _isLockObtained = false;
             }

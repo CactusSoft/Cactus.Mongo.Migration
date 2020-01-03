@@ -1,3 +1,4 @@
+using System;
 using AspnetExample.Migrations;
 using Cactus.Mongo.Migration;
 using Cactus.Mongo.Migration.Extensions;
@@ -21,10 +22,7 @@ namespace AspnetExample
             services.AddSingleton(s => new MongoClient("mongodb://localhost").GetDatabase("testdb"));
 
             // Add a migration
-            services.AddMigrations(
-                s => UpgradeSettings.Default,
-                s => s.GetRequiredService<IMongoDatabase>(),
-                s => null, s => null);
+            services.AddMigrations(new InitDecorator(null, new Version(0, 0, 1)));
             //services.AddMigrations(
             //    new DbInit(),
             //    new IUpgradeLink[] { new FirstMigration(), new SecondMigration() });

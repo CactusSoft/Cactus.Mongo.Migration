@@ -8,6 +8,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Moq;
 using NUnit.Framework;
+using Task = System.Threading.Tasks.Task;
 
 namespace Cactus.Mongo.Migration.Test.Integration
 {
@@ -17,6 +18,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
         private MongoDbRunner _runner;
         private IMongoDatabase _database;
         private MongoClient _client;
+        private UpgradeSettings _settings;
 
         [OneTimeSetUp]
         public void SetUp()
@@ -25,6 +27,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             _runner = MongoDbRunner.Start();
             _client = new MongoClient(_runner.ConnectionString);
             _database = _client.GetDatabase("intergationtest");
+            _settings = UpgradeSettings.Default;
 
         }
 
@@ -40,26 +43,34 @@ namespace Cactus.Mongo.Migration.Test.Integration
         {
             var dbLockMoq = new Mock<IDbLock>();
             dbLockMoq.Setup(e => e.ObtainLock(It.IsAny<TimeSpan>())).Returns(Task.FromResult(
-                new DbVersion
+                (IDbLockState)new DbVersion
                 {
-                    AutoUpgradeEnabled = true,
                     IsLocked = true,
                     Id = ObjectId.GenerateNewId().ToString()
                 }));
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+
+            var trackerMoq = new Mock<IMigrationTracker>();
+            trackerMoq.Setup(e => e.GetState()).Returns(Task.FromResult(
+                (IMigrationState)new DbVersion
+                {
+                    AutoUpgradeEnabled = true
+                }));
+            var upgrades = new MigrationChain(new List<IUpgradeLink>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
             });
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
                 upgrades,
                 null,
                 new UpgradeSettings { IsTransactionRequired = true },
-                dbLockMoq.Object, new NullLoggerFactory());
+                dbLockMoq.Object,
+                trackerMoq.Object,
+                new NullLoggerFactory());
 
-            var ex = Assert.ThrowsAsync<MongoMigrationException>(upgrader.UpgradeOrInit);
+            var ex = Assert.ThrowsAsync<MigrationException>(upgrader.UpgradeOrInit);
             Assert.IsTrue(ex.Message.Contains("transactions are not available", StringComparison.OrdinalIgnoreCase),
                 ex.Message);
         }
@@ -69,26 +80,34 @@ namespace Cactus.Mongo.Migration.Test.Integration
         {
             var dbLockMoq = new Mock<IDbLock>();
             dbLockMoq.Setup(e => e.ObtainLock(It.IsAny<TimeSpan>())).Returns(Task.FromResult(
-                new DbVersion
+                (IDbLockState)new DbVersion
                 {
-                    AutoUpgradeEnabled = false,
                     IsLocked = true,
                     Id = ObjectId.GenerateNewId().ToString()
                 }));
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+
+            var trackerMoq = new Mock<IMigrationTracker>();
+            trackerMoq.Setup(e => e.GetState()).Returns(Task.FromResult(
+                (IMigrationState)new DbVersion
+                {
+                    AutoUpgradeEnabled = false
+                }));
+            var upgrades = new MigrationChain(new List<IUpgradeLink>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
             });
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
                 upgrades,
                 null,
                 new UpgradeSettings(),
-                dbLockMoq.Object, new NullLoggerFactory());
+                dbLockMoq.Object,
+                trackerMoq.Object,
+                new NullLoggerFactory());
 
-            var ex = Assert.ThrowsAsync<MongoMigrationException>(upgrader.UpgradeOrInit);
+            var ex = Assert.ThrowsAsync<MigrationException>(upgrader.UpgradeOrInit);
             Assert.IsTrue(ex.Message.Contains("autoupgrade is disabled", StringComparison.OrdinalIgnoreCase),
                 ex.Message);
         }
@@ -99,14 +118,16 @@ namespace Cactus.Mongo.Migration.Test.Integration
             var settings = new UpgradeSettings();
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
-            var dbLock = new MongoDbLock(verCollection);
+            var dbLock = new MongoDbLock(_settings,_database);
+            var tracker = new MongoMigrationTracker(_settings, _database);
 
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
-                new UpgradeChain(null),
+                new MigrationChain(null),
                 null,
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
 
             await upgrader.UpgradeOrInit();
@@ -121,19 +142,21 @@ namespace Cactus.Mongo.Migration.Test.Integration
             var settings = new UpgradeSettings();
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
-            var dbLock = new MongoDbLock(verCollection);
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+            var dbLock = new MongoDbLock(_settings,_database);
+            var tracker = new MongoMigrationTracker(_settings, _database);
+            var upgrades = new MigrationChain(new List<IUpgradeLink>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
             });
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
                 upgrades,
                 null,
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
 
             await upgrader.UpgradeOrInit();
@@ -149,22 +172,24 @@ namespace Cactus.Mongo.Migration.Test.Integration
             var settings = new UpgradeSettings();
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
-            var dbLock = new MongoDbLock(verCollection);
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+            var dbLock = new MongoDbLock(_settings,_database);
+            var tracker = new MongoMigrationTracker(_settings, _database);
+            var upgrades = new MigrationChain(new List<IUpgradeLink>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
             });
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
                 upgrades,
                 new UpgradeStub(null, "0.0", (s, db, log) => throw new Exception("test init failed")),
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
 
-            var ex = Assert.ThrowsAsync<MongoMigrationException>(upgrader.UpgradeOrInit);
+            var ex = Assert.ThrowsAsync<MigrationException>(upgrader.UpgradeOrInit);
             Assert.IsNotNull(ex.InnerException);
             Assert.AreEqual("test init failed", ex.InnerException?.Message);
 
@@ -174,22 +199,24 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.IsNotNull(ver.LastUpgradeError);
             Assert.IsTrue(ver.LastUpgradeError.Contains("test init failed"));
         }
-        
+
         [Test]
         public async Task UpgradeTest()
         {
             var settings = new UpgradeSettings();
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
-            var dbLock = new MongoDbLock(verCollection);
+            var dbLock = new MongoDbLock(_settings,_database);
+            var tracker = new MongoMigrationTracker(_settings, _database);
 
             //Step1: init db
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
-                new UpgradeChain(null),
+                new MigrationChain(null),
                 new UpgradeStub(null, "0.0"),
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
             await upgrader.UpgradeOrInit();
 
@@ -197,19 +224,20 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.AreEqual(Version.Parse("0.0"), ver.Version);
 
             //Step2: Apply upgrade chain
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+            var upgrades = new MigrationChain(new List<IUpgradeLink>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
             });
 
-            upgrader = new TransactionalUpgrader(
+            upgrader = new MongoMigrator(
                 _database,
                 upgrades,
                 new UpgradeStub(null, "0.0", (s, db, log) => throw new Exception("test init failed")),
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
             await upgrader.UpgradeOrInit();
 
@@ -221,18 +249,20 @@ namespace Cactus.Mongo.Migration.Test.Integration
         [Test]
         public async Task UpgradeWithDifferentVerCollectionNameTest()
         {
-            var settings = new UpgradeSettings {VersionCollectionName = "testtestete"};
+            var settings = new UpgradeSettings { VersionCollectionName = "testtestete" };
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
-            var dbLock = new MongoDbLock(verCollection);
+            var dbLock = new MongoDbLock(settings, _database);
+            var tracker = new MongoMigrationTracker(settings, _database);
 
             //Step1: init db
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
-                new UpgradeChain(null),
+                new MigrationChain(null),
                 new UpgradeStub(null, "0.0"),
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
             await upgrader.UpgradeOrInit();
 
@@ -240,19 +270,20 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.AreEqual(Version.Parse("0.0"), ver.Version);
 
             //Step2: Apply upgrade chain
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+            var upgrades = new MigrationChain(new List<IUpgradeLink>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
             });
 
-            upgrader = new TransactionalUpgrader(
+            upgrader = new MongoMigrator(
                 _database,
                 upgrades,
                 new UpgradeStub(null, "0.0", (s, db, log) => throw new Exception("test init failed")),
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
             await upgrader.UpgradeOrInit();
 
@@ -267,22 +298,24 @@ namespace Cactus.Mongo.Migration.Test.Integration
             var settings = new UpgradeSettings();
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
-            var dbLock = new MongoDbLock(verCollection);
+            var dbLock = new MongoDbLock(_settings,_database);
+            var tracker = new MongoMigrationTracker(_settings, _database);
 
             //Step2: Apply upgrade chain
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+            var upgrades = new MigrationChain(new List<IUpgradeLink>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
             });
 
-            var upgrader = new TransactionalUpgrader(
+            var upgrader = new MongoMigrator(
                 _database,
                 upgrades,
                 new UpgradeStub(null, "0.0"),
                 settings,
                 dbLock,
+                tracker,
                 new NullLoggerFactory());
             await upgrader.UpgradeOrInit();
 
