@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Cactus.Mongo.Migration.Model;
 using Microsoft.Extensions.Logging;
@@ -8,8 +9,10 @@ namespace Cactus.Mongo.Migration.Test
 {
     internal class UpgradeStub : IUpgradeLink
     {
+        private volatile int _execCounter;
         private readonly Func<IClientSessionHandle, IMongoDatabase, ILogger, Task> _upgrade;
 
+        public int ExecCounter => _execCounter;
         public UpgradeStub(string from, string to) : this(from, to, (s, d, l) => Task.CompletedTask)
         {
             MinFrom = from == null ? null : Version.Parse(from);
@@ -29,6 +32,7 @@ namespace Cactus.Mongo.Migration.Test
 
         public Task Apply(IClientSessionHandle session, IMongoDatabase db, ILogger log)
         {
+            Interlocked.Increment(ref _execCounter);
             return _upgrade(session, db, log);
         }
     }

@@ -89,11 +89,21 @@ namespace Cactus.Mongo.Migration
 
                 if (IsNewDatabase())
                 {
-                    //Get max(init.ver, updates.lastVer)
-                    var targetVersion = _initializer?.UpgradeTo ?? _upgrades.Target;
-                    targetVersion = targetVersion < _upgrades.Target ? _upgrades.Target : targetVersion;
-
-                    await Init(targetVersion);
+                    if (!_settings.ExecWholeChainOnInit)
+                    {
+                        //Get max(init.ver, updates.lastVer)
+                        var targetVersion = _initializer?.UpgradeTo ?? _upgrades.Target;
+                        targetVersion = targetVersion < _upgrades.Target ? _upgrades.Target : targetVersion;
+                        await Init(targetVersion);
+                    }
+                    else
+                    {
+                        if (_initializer != null)
+                        {
+                            await Init(_initializer.UpgradeTo);
+                        }
+                        await Upgrade();
+                    }
                 }
                 else
                 {

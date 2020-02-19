@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Cactus.Mongo.Migration.Model;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -116,18 +117,19 @@ namespace Cactus.Mongo.Migration.Test.Integration
         }
 
         [Test]
-        public async Task InitToTheLastVersionTest()
+        public async Task InitToTheLastVersionWithOnlyInitTest()
         {
             var settings = new UpgradeSettings();
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
             var dbLock = new MongoDbLock(verCollection);
-            var upgrades = new UpgradeChain(new List<IUpgradeLink>
+            var upgradeList = new List<UpgradeStub>
             {
                 new UpgradeStub("0.0", "0.1"),
                 new UpgradeStub("0.1", "0.2"),
                 new UpgradeStub("0.2", "0.3"),
-            });
+            };
+            var upgrades = new UpgradeChain(upgradeList);
             var upgrader = new TransactionalUpgrader(
                 _database,
                 upgrades,
@@ -141,6 +143,37 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.AreEqual(Version.Parse("0.3"), ver.Version);
             Assert.IsTrue(ver.AutoUpgradeEnabled);
             Assert.IsNull(ver.LastUpgradeError);
+            Assert.IsTrue(upgradeList.All(e => e.ExecCounter == 0), "Some upgrades are applied but they should not");
+        }
+
+        [Test]
+        public async Task InitToTheLastVersionWithWholeUpgradeChainTest()
+        {
+            var settings = new UpgradeSettings { ExecWholeChainOnInit = true };
+            var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
+            await _database.DropCollectionAsync(settings.VersionCollectionName);
+            var dbLock = new MongoDbLock(verCollection);
+            var upgradeList = new List<UpgradeStub>
+            {
+                new UpgradeStub(null, "0.1"),
+                new UpgradeStub("0.1", "0.2"),
+                new UpgradeStub("0.2", "0.3"),
+            };
+            var upgrades = new UpgradeChain(upgradeList);
+            var upgrader = new TransactionalUpgrader(
+                _database,
+                upgrades,
+                null,
+                settings,
+                dbLock,
+                new NullLoggerFactory());
+
+            await upgrader.UpgradeOrInit();
+            var ver = (await verCollection.FindAsync(e => true)).First();
+            Assert.AreEqual(Version.Parse("0.3"), ver.Version);
+            Assert.IsTrue(ver.AutoUpgradeEnabled);
+            Assert.IsNull(ver.LastUpgradeError);
+            Assert.IsTrue(upgradeList.All(e => e.ExecCounter == 1), "Not all upgrades are applied");
         }
 
         [Test]
@@ -174,7 +207,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.IsNotNull(ver.LastUpgradeError);
             Assert.IsTrue(ver.LastUpgradeError.Contains("test init failed"));
         }
-        
+
         [Test]
         public async Task UpgradeTest()
         {
@@ -221,7 +254,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
         [Test]
         public async Task UpgradeWithDifferentVerCollectionNameTest()
         {
-            var settings = new UpgradeSettings {VersionCollectionName = "testtestete"};
+            var settings = new UpgradeSettings { VersionCollectionName = "testtestete" };
             var verCollection = _database.GetCollection<DbVersion>(settings.VersionCollectionName);
             await _database.DropCollectionAsync(settings.VersionCollectionName);
             var dbLock = new MongoDbLock(verCollection);
