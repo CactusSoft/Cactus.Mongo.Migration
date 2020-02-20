@@ -151,21 +151,28 @@ namespace Cactus.Mongo.Migration
             _log.LogDebug("Upgrade to {0}", upgrade.UpgradeTo);
             using (var session = await _db.Client.StartSessionAsync())
             {
-                if (_isTransactionsAvailable)
-                    session.StartTransaction();
                 try
                 {
-                    await upgrade.Apply(session, _db, _logFactory.CreateLogger(upgrade.GetType()));
-                    await _versionCollection.UpdateOneAsync(session, e => e.Id == _currentVersion.Id, Builders<DbVersion>.Update.Set(e => e.Version, upgrade.UpgradeTo));
                     if (_isTransactionsAvailable)
-                        await session.CommitTransactionAsync();
+                    {
+                        await session.WithTransactionAsync(async (s, c) =>
+                        {
+                            await upgrade.Apply(s, _db, _logFactory.CreateLogger(upgrade.GetType()));
+                            await _versionCollection.UpdateOneAsync(s, e => e.Id == _currentVersion.Id, Builders<DbVersion>.Update.Set(e => e.Version, upgrade.UpgradeTo), cancellationToken: c);
+                            return 0;
+                        });
+                    }
+                    else
+                    {
+                        await upgrade.Apply(session, _db, _logFactory.CreateLogger(upgrade.GetType()));
+                        await _versionCollection.UpdateOneAsync(session, e => e.Id == _currentVersion.Id, Builders<DbVersion>.Update.Set(e => e.Version, upgrade.UpgradeTo));
+                    }
                 }
                 catch (Exception ex)
                 {
                     if (_isTransactionsAvailable)
                     {
-                        _log.LogError("Upgrade to {0} failed, rollback the transaction...", upgrade.UpgradeTo);
-                        await session.AbortTransactionAsync();
+                        _log.LogError("Upgrade to {0} failed, tx has been rolled back", upgrade.UpgradeTo);
                     }
                     else
                     {
