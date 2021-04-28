@@ -13,7 +13,7 @@ namespace Cactus.Mongo.Migration.Test
         private readonly Func<IClientSessionHandle, IMongoDatabase, ILogger, Task> _upgrade;
 
         public int ExecCounter => _execCounter;
-        public UpgradeStub(string from, string to) : this(from, to, (s, d, l) => Task.CompletedTask)
+        public UpgradeStub(string from, string to) : this(from, to, (_, _, _) => Task.CompletedTask)
         {
             MinFrom = from == null ? null : Version.Parse(from);
             UpgradeTo = Version.Parse(to);

@@ -192,7 +192,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             var upgrader = new TransactionalUpgrader(
                 _database,
                 upgrades,
-                new UpgradeStub(null, "0.0", (s, db, log) => throw new Exception("test init failed")),
+                new UpgradeStub(null, "0.0", (_, _, _) => throw new Exception("test init failed")),
                 settings,
                 dbLock,
                 new NullLoggerFactory());
@@ -240,7 +240,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             upgrader = new TransactionalUpgrader(
                 _database,
                 upgrades,
-                new UpgradeStub(null, "0.0", (s, db, log) => throw new Exception("test init failed")),
+                new UpgradeStub(null, "0.0", (_, _, _) => throw new Exception("test init failed")),
                 settings,
                 dbLock,
                 new NullLoggerFactory());
@@ -283,7 +283,7 @@ namespace Cactus.Mongo.Migration.Test.Integration
             upgrader = new TransactionalUpgrader(
                 _database,
                 upgrades,
-                new UpgradeStub(null, "0.0", (s, db, log) => throw new Exception("test init failed")),
+                new UpgradeStub(null, "0.0", (_, _, _) => throw new Exception("test init failed")),
                 settings,
                 dbLock,
                 new NullLoggerFactory());

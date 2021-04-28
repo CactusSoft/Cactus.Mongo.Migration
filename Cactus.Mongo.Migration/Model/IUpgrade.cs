@@ -18,6 +18,7 @@ namespace Cactus.Mongo.Migration.Model
         /// <summary>
         /// Apply upgrade method
         /// </summary>
+        /// <param name="session"></param>
         /// <param name="db">Database object</param>
         /// <param name="log"></param>
         /// <returns></returns>

@@ -89,7 +89,6 @@ namespace Cactus.Mongo.Migration.Test.Integration
             Assert.IsNull(ver1.Version);
 
             var dbLock2 = new MongoDbLock(verCollection);
-            var stopWatch = new Stopwatch();
             var secondLockTask = dbLock2.ObtainLock(TimeSpan.FromSeconds(5));
             await dbLock1.ReleaseLock();
             var ver2 = await secondLockTask;
