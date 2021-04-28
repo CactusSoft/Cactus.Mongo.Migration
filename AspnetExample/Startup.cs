@@ -1,5 +1,3 @@
-using AspnetExample.Migrations;
-using Cactus.Mongo.Migration;
 using Cactus.Mongo.Migration.Extensions;
 using Cactus.Mongo.Migration.Model;
 using Microsoft.AspNetCore.Builder;
