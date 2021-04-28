@@ -70,7 +70,9 @@ namespace Cactus.Mongo.Migration
                 }
                 else
                 {
-                    throw new MigrationException($"Chain validation failed: unable to find a start point to upgrade from NULL version");
+                    throw new MigrationException($"Chain validation failed: unable to find a start point to upgrade from NULL version. " +
+                        $"Existing chain has {_upgradeChain.Count} items, upgrade range is " +
+                        $"{_upgradeChain.Min(e => e.MinFrom)} - {_upgradeChain.Max(e => e.MinFrom)}");
                 }
             }
             else
@@ -84,8 +86,10 @@ namespace Cactus.Mongo.Migration
                 var startPoint = _upgradeChain.FirstOrDefault(e => e.MinFrom <= from && e.UpgradeTo > from);
                 if (startPoint == null)
                 {
-
-                    throw new MigrationException($"Chain validation failed: unable to find a start point to upgrade from the current version {from}");
+                    throw new MigrationException(
+                        $"Chain validation failed: unable to find a start point to upgrade from the current version {from}. " +
+                        $"Existing chain has {_upgradeChain.Count} items, upgrade range is " +
+                        $"{_upgradeChain.Min(e => e.MinFrom)} - {_upgradeChain.Max(e => e.MinFrom)}");
                 }
 
                 var startindex = _upgradeChain.IndexOf(startPoint);
