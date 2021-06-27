@@ -13,6 +13,7 @@
     <RepositoryType>GitHub</RepositoryType>
     <Company>CactusSoft LLC</Company>
     <Version>1.0.7</Version>
+    <PackageVersion>1.0.8</PackageVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -20,7 +20,7 @@ namespace Cactus.Mongo.Migration.Extensions
             services.AddScoped<IDbLock>(s => new MongoDbLock(s.GetRequiredService<IMongoCollection<DbVersion>>()));
             services.AddScoped<IUpgradeChain>(s => new UpgradeChain(upgrades(s)));
             services.AddScoped<IUpgrader>(s => new TransactionalUpgrader(
-                s.GetRequiredService<IMongoDatabase>(),
+                db(s),
                 s.GetRequiredService<IUpgradeChain>(),
                 initializer(s),
                 settings(s),
