@@ -20,32 +20,6 @@ namespace Cactus.Mongo.Migration
         private readonly bool _isTransactionsAvailable;
         private DbVersion _currentVersion;
 
-        /// <summary>
-        /// Only for test
-        /// </summary>
-        /// <param name="db"></param>
-        /// <param name="upgrades"></param>
-        /// <param name="initializer"></param>
-        /// <param name="settings"></param>
-        /// <param name="logFactory"></param>
-        public TransactionalUpgrader(
-            IMongoDatabase db,
-            IUpgradeChain upgrades,
-            IUpgrade initializer,
-            IUpgradeSettings settings,
-            ILoggerFactory logFactory)
-        {
-            _log = logFactory.CreateLogger<TransactionalUpgrader>();
-            _logFactory = logFactory;
-            _db = db;
-            _upgrades = upgrades;
-            _initializer = initializer;
-            _settings = settings;
-            _versionCollection = _db.GetCollection<DbVersion>(settings.VersionCollectionName);
-            _dbLock = new MongoDbLock(_versionCollection);
-            _isTransactionsAvailable = _db.Client.Cluster.Description.Type > ClusterType.Standalone;
-        }
-
         public TransactionalUpgrader(
             IMongoDatabase db,
             IUpgradeChain upgrades,

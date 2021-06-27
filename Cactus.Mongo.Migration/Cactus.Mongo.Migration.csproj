@@ -13,6 +13,7 @@
     <PackageTags>mongodb,migration</PackageTags>
     <Description>Simple MongoDB versioning &amp; migrations</Description>
     <Version>1.0.7</Version>
+    <PackageVersion>1.0.9</PackageVersion>
   </PropertyGroup>
 
   <ItemGroup>

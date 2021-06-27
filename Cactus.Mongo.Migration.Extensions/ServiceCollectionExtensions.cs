@@ -24,6 +24,7 @@ namespace Cactus.Mongo.Migration.Extensions
                 s.GetRequiredService<IUpgradeChain>(),
                 initializer(s),
                 settings(s),
+                s.GetRequiredService<IDbLock>(),
                 s.GetRequiredService<ILoggerFactory>()
                 ));
 
